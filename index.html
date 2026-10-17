@@ -71,8 +71,7 @@
   </main>
 
   <script>
-    // Tempel URL Web App Apps Script yang berakhiran /exec di sini.
-    const APPS_SCRIPT_URL = '';
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypI5G9DnKC3kZ0SoIVafg5DfVDfiSh6gCgpu_A53Xd41ahzZ4naCOAdbaDS_xRIuNY/exec';
 
     const questionGroups = [
       {
@@ -436,7 +435,7 @@
         script.onerror = () => finish(new Error('Tidak dapat membaca Google Sheets.'));
         let url;
         try {
-          url = new URL(https://script.google.com/macros/s/AKfycbypI5G9DnKC3kZ0SoIVafg5DfVDfiSh6gCgpu_A53Xd41ahzZ4naCOAdbaDS_xRIuNY/exec);
+          url = new URL(APPS_SCRIPT_URL);
         } catch (error) {
           finish(new Error('URL Apps Script tidak valid.'));
           return;
