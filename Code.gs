@@ -2,6 +2,7 @@ const SHEET_NAME = 'Pengkajian Komunitas';
 
 function doPost(e) {
   try {
+    requireAuthorizedUser_();
     const rawPayload = e && e.parameter && e.parameter.payload;
     if (!rawPayload) throw new Error('Data pengkajian tidak ditemukan.');
 
@@ -42,6 +43,7 @@ function doPost(e) {
 
 function doGet(e) {
   try {
+    requireAuthorizedUser_();
     const sheet = getAssessmentSheet_();
     const values = sheet.getDataRange().getValues();
     const headers = values.length ? values[0] : [];
@@ -73,6 +75,21 @@ function doGet(e) {
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
     return jsonOutput_(result);
+  }
+}
+
+function requireAuthorizedUser_() {
+  const email = Session.getActiveUser().getEmail().trim().toLowerCase();
+  if (!email) {
+    throw new Error('Akun Google tidak terdeteksi. Pastikan Anda login dengan akun Workspace yang diizinkan.');
+  }
+
+  const allowedEmails = (PropertiesService.getScriptProperties().getProperty('AUTHORIZED_EMAILS') || '')
+    .split(/[,\s;]+/)
+    .map(address => address.trim().toLowerCase())
+    .filter(Boolean);
+  if (!allowedEmails.includes(email)) {
+    throw new Error('Akun Google ini tidak diizinkan mengakses data pengkajian.');
   }
 }
 

@@ -60,18 +60,19 @@
       <ol>
         <li>Buat Google Sheet, lalu pilih <strong>Ekstensi → Apps Script</strong>.</li>
         <li>Salin kode dari file <code>Code.gs</code> ke editor Apps Script, lalu simpan.</li>
-        <li>Pilih <strong>Deploy → New deployment → Web app</strong>. Jalankan sebagai akun pemilik sheet dan batasi akses hanya kepada pengguna yang berhak.</li>
-        <li>Setujui izin yang diminta, deploy, lalu salin URL Web App yang berakhiran <code>/exec</code>.</li>
-        <li>Tempel URL itu ke konstanta <code>APPS_SCRIPT_URL</code> di bagian bawah file <code>index.html</code>. Buka ulang aplikasi.</li>
+        <li>Di <strong>Project Settings → Script Properties</strong>, tambahkan <code>AUTHORIZED_EMAILS</code> berisi alamat email anggota tim yang diizinkan, dipisahkan koma atau baris baru.</li>
+        <li>Pilih <strong>Deploy → New deployment → Web app</strong>, jalankan sebagai akun pemilik sheet, dan batasi akses ke pengguna dalam domain Google Workspace tim. Jangan pilih <strong>Hanya saya</strong> atau akses publik.</li>
+        <li>Setujui izin yang diminta, deploy, lalu salin URL Web App yang berakhiran <code>/exec</code>. Perbarui deployment setelah mengubah kode.</li>
+        <li>Tempel URL itu ke konstanta <code>APPS_SCRIPT_URL</code> di bagian bawah file <code>index.html</code>. Pengguna harus login dengan akun Workspace yang alamatnya tercantum pada <code>AUTHORIZED_EMAILS</code>.</li>
       </ol>
-      <p class="security-note"><strong>Perlindungan data:</strong> batasi akses Web App dan spreadsheet kepada tim yang berwenang. Jangan memilih akses publik untuk data pengkajian yang dapat mengidentifikasi warga.</p>
+      <p class="security-note"><strong>Perlindungan data:</strong> akses domain hanya membuka pintu ke pemeriksaan email allowlist pada skrip; hanya alamat yang tercantum di <code>AUTHORIZED_EMAILS</code> yang boleh membaca atau menulis. Jangan menghapus pemeriksaan ini atau memilih akses publik untuk data pengkajian.</p>
     </details>
 
     <footer>Pengkajian komunitas · Data tersimpan pada Google Sheets yang Anda hubungkan</footer>
   </main>
 
   <script>
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypI5G9DnKC3kZ0SoIVafg5DfVDfiSh6gCgpu_A53Xd41ahzZ4naCOAdbaDS_xRIuNY/exec';
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_Diim9PMzvJnS9938OQOu-1ucedtWuT5-fYolBpzQm5rwuMF7QPhBpZHx74ypb07l/exec';
 
     const questionGroups = [
       {
@@ -391,7 +392,7 @@
 
       try {
         const body = new URLSearchParams({ payload: JSON.stringify(payload) });
-        await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body });
+        await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', credentials: 'include', body });
         setStatus(formStatus, 'Permintaan terkirim. Memverifikasi data di Google Sheets...', '');
         await new Promise(resolve => window.setTimeout(resolve, 1200));
         const rows = await fetchRecap();
@@ -432,7 +433,7 @@
           resolve(Array.isArray(result) ? result : []);
           finish();
         };
-        script.onerror = () => finish(new Error('Tidak dapat membaca Google Sheets.'));
+        script.onerror = () => finish(new Error('Apps Script menolak akses baca atau tidak dapat dijangkau. Pastikan Anda login dengan akun Workspace yang terdaftar dan deployment dibatasi ke domain tim.'));
         let url;
         try {
           url = new URL(APPS_SCRIPT_URL);
