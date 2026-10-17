@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f2f7f5">
+  <title>Pengkajian Komunitas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+    <header class="page-header">
+      <p class="eyebrow">KESEHATAN MASYARAKAT</p>
+      <h1>Pengkajian Komunitas</h1>
+      <p class="intro">Catat kondisi, sumber daya, dan prioritas kesehatan komunitas secara terstruktur.</p>
+    </header>
+
+    <nav class="tabs" aria-label="Menu pengkajian">
+      <button class="tab-link active" id="inputTabButton" type="button" role="tab" aria-selected="true" aria-controls="inputTab">Form pengkajian</button>
+      <button class="tab-link" id="recapTabButton" type="button" role="tab" aria-selected="false" aria-controls="recapTab">Hasil rekap</button>
+    </nav>
+
+    <section class="tab-panel active" id="inputTab" role="tabpanel" aria-labelledby="inputTabButton">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">FORMULIR</p>
+          <h2>Data pengkajian</h2>
+        </div>
+        <span class="required-note"><span aria-hidden="true">*</span> Wajib diisi</span>
+      </div>
+      <p class="privacy-note">Isi berdasarkan hasil pengkajian. Hindari mencantumkan diagnosis atau identitas sensitif yang tidak diperlukan.</p>
+
+      <form id="assessmentForm">
+        <div id="questionGroups"></div>
+        <div class="form-actions">
+          <button class="button button-secondary" id="resetButton" type="reset">Bersihkan formulir</button>
+          <button class="button button-primary" id="submitButton" type="submit">Simpan pengkajian <span aria-hidden="true">→</span></button>
+        </div>
+        <p class="form-status" id="formStatus" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="tab-panel" id="recapTab" role="tabpanel" aria-labelledby="recapTabButton" hidden>
+      <div class="section-heading recap-heading">
+        <div>
+          <p class="eyebrow">RINGKASAN</p>
+          <h2>Hasil rekap</h2>
+          <p class="muted" id="recapCount">Data akan dimuat dari Google Sheets.</p>
+        </div>
+        <button class="button button-secondary" id="refreshButton" type="button"><span aria-hidden="true">↻</span> Muat ulang</button>
+      </div>
+      <p class="form-status" id="recapStatus" role="status" aria-live="polite"></p>
+      <div class="table-responsive" id="tableContainer">
+        <p class="empty-state">Rekap data belum dimuat.</p>
+      </div>
+    </section>
+
+    <details class="setup-guide">
+      <summary>Petunjuk koneksi Google Sheets</summary>
+      <ol>
+        <li>Buat Google Sheet, lalu pilih <strong>Ekstensi → Apps Script</strong>.</li>
+        <li>Salin kode dari file <code>Code.gs</code> ke editor Apps Script, lalu simpan.</li>
+        <li>Pilih <strong>Deploy → New deployment → Web app</strong>. Jalankan sebagai akun pemilik sheet dan batasi akses hanya kepada pengguna yang berhak.</li>
+        <li>Setujui izin yang diminta, deploy, lalu salin URL Web App yang berakhiran <code>/exec</code>.</li>
+        <li>Tempel URL itu ke konstanta <code>APPS_SCRIPT_URL</code> di bagian bawah file <code>index.html</code>. Buka ulang aplikasi.</li>
+      </ol>
+      <p class="security-note"><strong>Perlindungan data:</strong> batasi akses Web App dan spreadsheet kepada tim yang berwenang. Jangan memilih akses publik untuk data pengkajian yang dapat mengidentifikasi warga.</p>
+    </details>
+
+    <footer>Pengkajian komunitas · Data tersimpan pada Google Sheets yang Anda hubungkan</footer>
+  </main>
+
+  <script>
+    // Tempel URL Web App Apps Script yang berakhiran /exec di sini.
+    const APPS_SCRIPT_URL = '';
+
+    const questionGroups = [
+      {
+        title: 'Identitas dan demografi',
+        description: 'Informasi dasar responden dan gambaran penduduk.',
+        fields: [
+          { name: 'tanggal_pengkajian', label: 'Tanggal pengkajian', type: 'date', required: true },
+          { name: 'nama_kk', label: 'Nama kepala keluarga / responden', required: true },
+          { name: 'alamat', label: 'Alamat lengkap / wilayah', required: true },
+          { name: 'rt_rw', label: 'RT / RW / dusun' },
+          { name: 'jumlah_penduduk', label: 'Jumlah penduduk di wilayah yang dikaji', type: 'number', min: 0 },
+          { name: 'komposisi_penduduk', label: 'Komposisi penduduk (kelompok usia, jenis kelamin, dan kelompok rentan)', multiline: true },
+          { name: 'mobilitas_penduduk', label: 'Perpindahan atau mobilitas penduduk', multiline: true }
+        ]
+      },
+      {
+        title: 'Lingkungan fisik dan perumahan',
+        description: 'Kondisi rumah, sanitasi, sumber air, dan risiko lingkungan.',
+        fields: [
+          { name: 'kondisi_perumahan', label: 'Kondisi rumah dan kepadatan hunian', multiline: true },
+          { name: 'air_bersih', label: 'Sumber dan ketersediaan air bersih', multiline: true },
+          { name: 'sanitasi', label: 'Jamban, saluran limbah, dan sanitasi lingkungan', multiline: true },
+          { name: 'sampah', label: 'Pengelolaan sampah dan kebersihan lingkungan', multiline: true },
+          { name: 'risiko_lingkungan', label: 'Polusi, genangan, bencana, atau risiko lingkungan lainnya', multiline: true }
+        ]
+      },
+      {
+        title: 'Pelayanan dan kondisi kesehatan',
+        description: 'Akses fasilitas, kebiasaan kesehatan, dan kebutuhan pelayanan.',
+        fields: [
+          { name: 'fasilitas_kesehatan', label: 'Fasilitas kesehatan yang tersedia dan kemudahan aksesnya', multiline: true },
+          { name: 'tenaga_kesehatan', label: 'Tenaga kesehatan, kader, Posyandu, atau kegiatan kesehatan yang tersedia', multiline: true },
+          { name: 'masalah_kesehatan', label: 'Masalah kesehatan yang paling sering ditemukan', multiline: true },
+          { name: 'kesehatan_ibu_anak', label: 'Kondisi dan layanan kesehatan ibu, bayi, serta balita', multiline: true },
+          { name: 'perilaku_kesehatan', label: 'Perilaku hidup bersih dan sehat serta upaya pencegahan penyakit', multiline: true }
+        ]
+      },
+      {
+        title: 'Ekonomi dan mata pencaharian',
+        description: 'Gambaran pekerjaan, sumber penghasilan, dan kerentanan ekonomi.',
+        fields: [
+          { name: 'pekerjaan', label: 'Pekerjaan atau mata pencaharian utama', multiline: true },
+          { name: 'ekonomi', label: 'Gambaran kondisi ekonomi dan keluarga rentan', multiline: true },
+          { name: 'sumber_pangan', label: 'Ketersediaan pangan dan akses kebutuhan pokok', multiline: true }
+        ]
+      },
+      {
+        title: 'Pendidikan dan komunikasi',
+        description: 'Tingkat pendidikan dan saluran informasi yang digunakan warga.',
+        fields: [
+          { name: 'pendidikan', label: 'Tingkat pendidikan dan akses pendidikan', multiline: true },
+          { name: 'sumber_informasi', label: 'Media atau sumber informasi yang digunakan warga', multiline: true },
+          { name: 'akses_komunikasi', label: 'Akses komunikasi, internet, atau hambatan informasi', multiline: true }
+        ]
+      },
+      {
+        title: 'Keamanan, transportasi, dan fasilitas umum',
+        description: 'Aksesibilitas lingkungan, rasa aman, dan fasilitas yang mendukung warga.',
+        fields: [
+          { name: 'transportasi', label: 'Transportasi dan akses menuju fasilitas penting', multiline: true },
+          { name: 'keamanan', label: 'Keamanan, penerangan, dan risiko sosial', multiline: true },
+          { name: 'fasilitas_umum', label: 'Fasilitas umum, ruang terbuka, olahraga, dan rekreasi', multiline: true }
+        ]
+      },
+      {
+        title: 'Sosial, budaya, dan pemerintahan',
+        description: 'Hubungan sosial, kegiatan warga, nilai budaya, dan dukungan setempat.',
+        fields: [
+          { name: 'organisasi_sosial', label: 'Organisasi, kelompok warga, dan kegiatan gotong royong', multiline: true },
+          { name: 'budaya', label: 'Kebiasaan, nilai, atau budaya yang memengaruhi kesehatan', multiline: true },
+          { name: 'dukungan_pemerintah', label: 'Peran pemerintah setempat dan dukungan program', multiline: true }
+        ]
+      },
+      {
+        title: 'Potensi dan prioritas komunitas',
+        description: 'Rangkum aset komunitas, masalah utama, dan usulan tindak lanjut.',
+        fields: [
+          { name: 'potensi_komunitas', label: 'Kekuatan, sumber daya, dan potensi komunitas', multiline: true },
+          { name: 'masalah_prioritas', label: 'Masalah atau kebutuhan kesehatan yang menjadi prioritas', multiline: true, required: true },
+          { name: 'harapan_usulan', label: 'Harapan warga dan usulan kegiatan tindak lanjut', multiline: true },
+          { name: 'nama_pengkaji', label: 'Nama pengkaji', required: true }
+        ]
+      }
+    ];
+
+    const form = document.getElementById('assessmentForm');
+    const formStatus = document.getElementById('formStatus');
+    const submitButton = document.getElementById('submitButton');
+    const tableContainer = document.getElementById('tableContainer');
+    const recapStatus = document.getElementById('recapStatus');
+    const recapCount = document.getElementById('recapCount');
+    let recapRequestId = 0;
+    let pendingRecordId = '';
+
+    function todayLocal() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    function renderForm() {
+      const root = document.getElementById('questionGroups');
+      questionGroups.forEach((group, groupIndex) => {
+        const section = document.createElement('fieldset');
+        section.className = 'question-group';
+        const legend = document.createElement('legend');
+        legend.textContent = `${String(groupIndex + 1).padStart(2, '0')} / ${group.title}`;
+        section.append(legend);
+
+        const description = document.createElement('p');
+        description.className = 'group-description';
+        description.textContent = group.description;
+        section.append(description);
+
+        const grid = document.createElement('div');
+        grid.className = 'field-grid';
+        group.fields.forEach(field => {
+          const wrapper = document.createElement('div');
+          wrapper.className = `form-group${field.multiline ? ' form-group-wide' : ''}`;
+          const label = document.createElement('label');
+          label.htmlFor = field.name;
+          label.textContent = field.label;
+          if (field.required) {
+            const marker = document.createElement('span');
+            marker.className = 'required-marker';
+            marker.textContent = ' *';
+            label.append(marker);
+          }
+
+          const control = document.createElement(field.multiline ? 'textarea' : 'input');
+          control.id = field.name;
+          control.name = field.name;
+          control.required = Boolean(field.required);
+          control.autocomplete = 'off';
+          if (field.multiline) {
+            control.rows = 3;
+            control.placeholder = 'Tuliskan hasil pengkajian...';
+          } else {
+            control.type = field.type || 'text';
+            if (field.min !== undefined) control.min = String(field.min);
+            if (field.name === 'tanggal_pengkajian') control.value = todayLocal();
+          }
+          wrapper.append(label, control);
+          grid.append(wrapper);
+        });
+        section.append(grid);
+        root.append(section);
+      });
+    }
+
+    function switchTab(tabName) {
+      const isInput = tabName === 'inputTab';
+      document.getElementById('inputTab').hidden = !isInput;
+      document.getElementById('recapTab').hidden = isInput;
+      document.getElementById('inputTab').classList.toggle('active', isInput);
+      document.getElementById('recapTab').classList.toggle('active', !isInput);
+      document.getElementById('inputTabButton').classList.toggle('active', isInput);
+      document.getElementById('recapTabButton').classList.toggle('active', !isInput);
+      document.getElementById('inputTabButton').setAttribute('aria-selected', String(isInput));
+      document.getElementById('recapTabButton').setAttribute('aria-selected', String(!isInput));
+      if (!isInput) loadData().catch(() => {});
+    }
+
+    function setStatus(element, message, type) {
+      element.textContent = message;
+      element.className = `form-status${type ? ` ${type}` : ''}`;
+    }
+
+    function formatLabel(key) {
+      const field = questionGroups.flatMap(group => group.fields).find(item => item.name === key);
+      if (field) return field.label;
+      return key.replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+    }
+
+    function addCell(row, text, className) {
+      const cell = document.createElement('td');
+      if (className) cell.className = className;
+      cell.textContent = text || '—';
+      row.append(cell);
+      return cell;
+    }
+
+    function renderRecap(rows) {
+      tableContainer.replaceChildren();
+      recapCount.textContent = `${rows.length} pengkajian tersimpan`;
+      if (!rows.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = 'Belum ada data pengkajian di Google Sheets.';
+        tableContainer.append(empty);
+        return;
+      }
+
+      const table = document.createElement('table');
+      const head = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      ['Waktu input', 'Tanggal kaji', 'Kepala keluarga / responden', 'Wilayah', 'Prioritas utama', 'Detail'].forEach(label => {
+        const th = document.createElement('th');
+        th.scope = 'col';
+        th.textContent = label;
+        headerRow.append(th);
+      });
+      head.append(headerRow);
+      table.append(head);
+
+      const body = document.createElement('tbody');
+      rows.slice().reverse().forEach(item => {
+        const row = document.createElement('tr');
+        addCell(row, item.timestamp ? new Date(item.timestamp).toLocaleString('id-ID') : '—');
+        addCell(row, item.tanggal_pengkajian);
+        addCell(row, item.nama_kk);
+        addCell(row, [item.alamat, item.rt_rw].filter(Boolean).join(' · '));
+        addCell(row, item.masalah_prioritas);
+
+        const detailCell = document.createElement('td');
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'Lihat jawaban';
+        const list = document.createElement('dl');
+        list.className = 'detail-list';
+        Object.entries(item).forEach(([key, value]) => {
+          if (key === 'record_id' || key === 'timestamp' || !value) return;
+          const term = document.createElement('dt');
+          term.textContent = formatLabel(key);
+          const definition = document.createElement('dd');
+          definition.textContent = String(value);
+          list.append(term, definition);
+        });
+        details.append(summary, list);
+        detailCell.append(details);
+        row.append(detailCell);
+        body.append(row);
+      });
+      table.append(body);
+      tableContainer.append(table);
+    }
+
+    function loadData() {
+      if (!APPS_SCRIPT_URL) {
+        setStatus(recapStatus, 'URL Apps Script belum diatur. Ikuti petunjuk koneksi di bawah.', 'error');
+        return Promise.reject(new Error('URL Apps Script belum dikonfigurasi.'));
+      }
+      const requestId = ++recapRequestId;
+      setStatus(recapStatus, 'Mengambil data dari Google Sheets...', '');
+      tableContainer.replaceChildren();
+      const loading = document.createElement('p');
+      loading.className = 'empty-state';
+      loading.textContent = 'Memuat rekap...';
+      tableContainer.append(loading);
+
+      return new Promise((resolve, reject) => {
+        const callbackName = `recapCallback${Date.now()}${requestId}`;
+        const script = document.createElement('script');
+        const timeout = window.setTimeout(() => finish(new Error('Permintaan rekap melewati batas waktu.')), 15000);
+        const finish = error => {
+          window.clearTimeout(timeout);
+          script.remove();
+          delete window[callbackName];
+          if (error) {
+            if (requestId === recapRequestId) {
+              setStatus(recapStatus, `${error.message} Periksa URL dan izin deployment Apps Script.`, 'error');
+              tableContainer.replaceChildren();
+            }
+            reject(error);
+            return;
+          }
+          resolve();
+        };
+
+        window[callbackName] = result => {
+          if (result && result.error) {
+            finish(new Error(result.error));
+            return;
+          }
+          if (requestId === recapRequestId) {
+            renderRecap(Array.isArray(result) ? result : []);
+            setStatus(recapStatus, 'Rekap berhasil dimuat.', 'success');
+          }
+          finish();
+        };
+        script.onerror = () => finish(new Error('Tidak dapat menghubungi Apps Script.'));
+        let url;
+        try {
+          url = new URL(APPS_SCRIPT_URL);
+        } catch (error) {
+          finish(new Error('URL Apps Script tidak valid.'));
+          return;
+        }
+        url.searchParams.set('callback', callbackName);
+        url.searchParams.set('_', String(Date.now()));
+        script.src = url.toString();
+        document.head.append(script);
+      });
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      if (!APPS_SCRIPT_URL) {
+        setStatus(formStatus, 'URL Apps Script belum diatur. Ikuti petunjuk koneksi di bawah sebelum menyimpan.', 'error');
+        return;
+      }
+
+      submitButton.disabled = true;
+      document.getElementById('resetButton').disabled = true;
+      submitButton.textContent = 'Mengirim data...';
+      setStatus(formStatus, '', '');
+      const payload = Object.fromEntries(new FormData(form).entries());
+      form.querySelectorAll('input, textarea').forEach(control => {
+        control.disabled = true;
+      });
+      if (!pendingRecordId) {
+        pendingRecordId = window.crypto && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
+      payload.record_id = pendingRecordId;
+
+      try {
+        const body = new URLSearchParams({ payload: JSON.stringify(payload) });
+        await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body });
+        setStatus(formStatus, 'Permintaan terkirim. Memverifikasi data di Google Sheets...', '');
+        await new Promise(resolve => window.setTimeout(resolve, 1200));
+        const rows = await fetchRecap();
+        const saved = rows.some(row => row.record_id === payload.record_id);
+        if (!saved) throw new Error('Data belum muncul di rekap. Periksa deployment dan coba lagi.');
+        form.reset();
+        pendingRecordId = '';
+        document.getElementById('tanggal_pengkajian').value = todayLocal();
+        setStatus(formStatus, 'Pengkajian berhasil disimpan dan diverifikasi di Google Sheets.', 'success');
+      } catch (error) {
+        setStatus(formStatus, `${error.message || 'Gagal menyimpan data.'} Data formulir tetap tersedia; periksa koneksi sebelum mencoba lagi.`, 'error');
+      } finally {
+        form.querySelectorAll('input, textarea').forEach(control => {
+          control.disabled = false;
+        });
+        submitButton.disabled = false;
+        document.getElementById('resetButton').disabled = false;
+        submitButton.innerHTML = 'Simpan pengkajian <span aria-hidden="true">→</span>';
+      }
+    });
+
+    function fetchRecap() {
+      return new Promise((resolve, reject) => {
+        const callbackName = `verifyCallback${Date.now()}`;
+        const script = document.createElement('script');
+        const timeout = window.setTimeout(() => finish(new Error('Tidak dapat memverifikasi data pada Google Sheets.')), 15000);
+        const finish = error => {
+          window.clearTimeout(timeout);
+          script.remove();
+          delete window[callbackName];
+          if (error) reject(error);
+        };
+        window[callbackName] = result => {
+          if (result && result.error) {
+            finish(new Error(result.error));
+            return;
+          }
+          resolve(Array.isArray(result) ? result : []);
+          finish();
+        };
+        script.onerror = () => finish(new Error('Tidak dapat membaca Google Sheets.'));
+        let url;
+        try {
+          url = new URL(APPS_SCRIPT_URL);
+        } catch (error) {
+          finish(new Error('URL Apps Script tidak valid.'));
+          return;
+        }
+        url.searchParams.set('callback', callbackName);
+        url.searchParams.set('_', String(Date.now()));
+        script.src = url.toString();
+        document.head.append(script);
+      });
+    }
+
+    document.querySelectorAll('.tab-link').forEach(button => {
+      button.addEventListener('click', () => switchTab(button.id === 'inputTabButton' ? 'inputTab' : 'recapTab'));
+    });
+    document.getElementById('refreshButton').addEventListener('click', () => loadData().catch(() => {}));
+    document.getElementById('resetButton').addEventListener('click', () => {
+      pendingRecordId = '';
+      setStatus(formStatus, '', '');
+    });
+    form.addEventListener('input', () => {
+      if (!submitButton.disabled) pendingRecordId = '';
+    });
+    renderForm();
+  </script>
+</body>
+</html>
