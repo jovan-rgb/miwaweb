@@ -504,4 +504,14 @@ footer {
   .page-header h1 {
     font-size: 1.75rem;
   }
+  .theme-toggle {
+    top: 10px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+  }
+  .theme-toggle svg {
+    width: 18px;
+    height: 18px;
+  }
 }
