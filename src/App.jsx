@@ -220,7 +220,6 @@ function App() {
         
         <div className="login-panel">
           <div className="login-header">
-            <div style={{ width: '40px', height: '40px', background: 'var(--primary)', borderRadius: '10px', marginBottom: '20px' }}></div>
             <h1 style={{ margin: 0 }}>Welcome back!</h1>
             <p>Silakan login untuk mengakses data pengkajian.</p>
           </div>
