@@ -283,15 +283,35 @@ function App() {
         )}
       </button>
       <header className="page-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ textAlign: 'left' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          gap: '12px',
+          position: 'relative' 
+        }}>
+          <div style={{ textAlign: 'left', flex: 1 }}>
             <p className="eyebrow">KESEHATAN MASYARAKAT</p>
             <h1 style={{ margin: 0 }}>Pengkajian Komunitas</h1>
-            <p className="intro">Catat kondisi, sumber daya, dan prioritas kesehatan komunitas secara terstruktur.</p>
+            <p className="intro" style={{ textAlign: 'left', margin: '8px 0 0' }}>Catat kondisi, sumber daya, dan prioritas kesehatan komunitas secara terstruktur.</p>
           </div>
-          <button onClick={handleLogout} className="button button-secondary" style={{ fontSize: '0.8rem', padding: '8px 12px' }}>
-            Keluar
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button onClick={toggleTheme} className="theme-toggle-inline" title="Toggle Dark Mode">
+              {theme === 'light' ? (
+                <svg className="bubble-anim" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79Z" fill="currentColor"/>
+                </svg>
+              ) : (
+                <svg className="bubble-anim" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="5" fill="currentColor"/>
+                  <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              )}
+            </button>
+            <button onClick={handleLogout} className="button button-secondary" style={{ fontSize: '0.8rem', padding: '8px 12px' }}>
+              Keluar
+            </button>
+          </div>
         </div>
       </header>
 
