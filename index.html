@@ -15,6 +15,13 @@
       <p class="intro">Catat kondisi, sumber daya, dan prioritas kesehatan komunitas secara terstruktur.</p>
     </header>
 
+    <div class="progress-container" id="progressContainer" style="display: none; margin-bottom: 24px;">
+      <div class="progress-bar-bg" style="background: var(--surface-soft); height: 8px; border-radius: 4px; overflow: hidden;">
+        <div id="progressBar" style="background: var(--primary); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+      </div>
+      <p id="progressText" style="font-size: 0.75rem; color: var(--muted); text-align: right; margin: 4px 0 0;">0% selesai</p>
+    </div>
+
     <nav class="tabs" aria-label="Menu pengkajian">
       <button class="tab-link active" id="inputTabButton" type="button" role="tab" aria-selected="true" aria-controls="inputTab">Form pengkajian</button>
       <button class="tab-link" id="recapTabButton" type="button" role="tab" aria-selected="false" aria-controls="recapTab">Hasil rekap</button>
@@ -174,6 +181,7 @@
 
     function renderForm() {
       const root = document.getElementById('questionGroups');
+      root.replaceChildren();
       questionGroups.forEach((group, groupIndex) => {
         const section = document.createElement('fieldset');
         section.className = 'question-group';
@@ -208,30 +216,89 @@
           control.autocomplete = 'off';
           if (field.multiline) {
             control.rows = 3;
-            control.placeholder = 'Tuliskan hasil pengkajian...';
+            control.placeholder = 'Contoh: Sebagian besar warga memiliki akses air bersih namun pengelolaan sampah masih kurang...';
           } else {
             control.type = field.type || 'text';
             if (field.min !== undefined) control.min = String(field.min);
             if (field.name === 'tanggal_pengkajian') control.value = todayLocal();
           }
+          
+          control.addEventListener('input', debounce(() => {
+            updateProgress();
+          }, 500));
+          
           wrapper.append(label, control);
           grid.append(wrapper);
         });
         section.append(grid);
         root.append(section);
       });
+      updateProgress();
+    }
+
+    function debounce(func, wait) {
+      let timeout;
+      return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+      };
+    }
+
+    function saveDraft() {
+      const formData = Object.fromEntries(new FormData(form).entries());
+      localStorage.setItem('assessment_draft', JSON.stringify(formData));
+    }
+
+    function loadDraft() {
+      const draft = localStorage.getItem('assessment_draft');
+      if (!draft) return;
+      try {
+        const data = JSON.parse(draft);
+        Object.entries(data).forEach(([name, value]) => {
+          const control = form.elements[name];
+          if (control) control.value = value;
+        });
+      } catch (e) {
+        console.error('Gagal memuat draft:', e);
+      }
+    }
+
+    function updateProgress() {
+      const allFields = Array.from(form.querySelectorAll('input, textarea'));
+      const filledFields = allFields.filter(field => field.value.trim() !== '').length;
+      const percent = Math.round((filledFields / allFields.length) * 100);
+      
+      const container = document.getElementById('progressContainer');
+      const bar = document.getElementById('progressBar');
+      const text = document.getElementById('progressText');
+      
+      container.style.display = 'block';
+      bar.style.width = `${percent}%`;
+      text.textContent = `${percent}% selesai`;
     }
 
     function switchTab(tabName) {
       const isInput = tabName === 'inputTab';
-      document.getElementById('inputTab').hidden = !isInput;
-      document.getElementById('recapTab').hidden = isInput;
-      document.getElementById('inputTab').classList.toggle('active', isInput);
-      document.getElementById('recapTab').classList.toggle('active', !isInput);
+      const inputPanel = document.getElementById('inputTab');
+      const recapPanel = document.getElementById('recapTab');
+
+      inputPanel.hidden = !isInput;
+      recapPanel.hidden = isInput;
+      
+      inputPanel.classList.toggle('active', isInput);
+      recapPanel.classList.toggle('active', !isInput);
+      
       document.getElementById('inputTabButton').classList.toggle('active', isInput);
       document.getElementById('recapTabButton').classList.toggle('active', !isInput);
       document.getElementById('inputTabButton').setAttribute('aria-selected', String(isInput));
       document.getElementById('recapTabButton').setAttribute('aria-selected', String(!isInput));
+
+      // Trigger animation restart
+      const activePanel = isInput ? inputPanel : recapPanel;
+      activePanel.style.animation = 'none';
+      activePanel.offsetHeight; // force reflow
+      activePanel.style.animation = '';
+
       if (!isInput) loadData().catch(() => {});
     }
 
@@ -314,8 +381,9 @@
         setStatus(recapStatus, 'URL Apps Script belum diatur. Ikuti petunjuk koneksi di bawah.', 'error');
         return Promise.reject(new Error('URL Apps Script belum dikonfigurasi.'));
       }
+
       const requestId = ++recapRequestId;
-      setStatus(recapStatus, 'Mengambil data dari Google Sheets...', '');
+      setStatus(recapStatus, 'Mengambil data terbaru dari Google Sheets...', '');
       tableContainer.replaceChildren();
       const loading = document.createElement('p');
       loading.className = 'empty-state';
@@ -347,7 +415,8 @@
             return;
           }
           if (requestId === recapRequestId) {
-            renderRecap(Array.isArray(result) ? result : []);
+            const data = Array.isArray(result) ? result : [];
+            renderRecap(data);
             setStatus(recapStatus, 'Rekap berhasil dimuat.', 'success');
           }
           finish();
@@ -375,14 +444,14 @@
         return;
       }
 
+      // OPTIMISTIC UI: Start immediately without freezing the whole UI
       submitButton.disabled = true;
       document.getElementById('resetButton').disabled = true;
-      submitButton.textContent = 'Mengirim data...';
-      setStatus(formStatus, '', '');
+      submitButton.innerHTML = 'Mengirim... <span class="spinner">↻</span>';
+      setStatus(formStatus, 'Menyimpan data ke cloud...', '');
+      
       const payload = Object.fromEntries(new FormData(form).entries());
-      form.querySelectorAll('input, textarea').forEach(control => {
-        control.disabled = true;
-      });
+      
       if (!pendingRecordId) {
         pendingRecordId = window.crypto && crypto.randomUUID
           ? crypto.randomUUID()
@@ -392,22 +461,31 @@
 
       try {
         const body = new URLSearchParams({ payload: JSON.stringify(payload) });
+        
+        // Send request in background, don't block the UI
         await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', credentials: 'include', body });
-        setStatus(formStatus, 'Permintaan terkirim. Memverifikasi data di Google Sheets...', '');
-        await new Promise(resolve => window.setTimeout(resolve, 1200));
+        
+        // Optimistic Success: Assume it worked and clean up form quickly
+        setStatus(formStatus, 'Data terkirim! Memverifikasi...', 'success');
+        
+        // Background verification with a slight delay to avoid hitting GAS too hard
+        await new Promise(resolve => window.setTimeout(resolve, 1500));
         const rows = await fetchRecap();
         const saved = rows.some(row => row.record_id === payload.record_id);
-        if (!saved) throw new Error('Data belum muncul di rekap. Periksa deployment dan coba lagi.');
+        
+        if (!saved) {
+            // Fallback if verification fails
+            throw new Error('Data belum terverifikasi di server. Mohon cek Hasil Rekap secara manual.');
+        }
+        
         form.reset();
         pendingRecordId = '';
         document.getElementById('tanggal_pengkajian').value = todayLocal();
-        setStatus(formStatus, 'Pengkajian berhasil disimpan dan diverifikasi di Google Sheets.', 'success');
+        localStorage.removeItem('assessment_draft');
+        setStatus(formStatus, 'Pengkajian berhasil disimpan dan diverifikasi.', 'success');
       } catch (error) {
-        setStatus(formStatus, `${error.message || 'Gagal menyimpan data.'} Data formulir tetap tersedia; periksa koneksi sebelum mencoba lagi.`, 'error');
+        setStatus(formStatus, `${error.message || 'Gagal menyimpan data.'}`, 'error');
       } finally {
-        form.querySelectorAll('input, textarea').forEach(control => {
-          control.disabled = false;
-        });
         submitButton.disabled = false;
         document.getElementById('resetButton').disabled = false;
         submitButton.innerHTML = 'Simpan pengkajian <span aria-hidden="true">→</span>';

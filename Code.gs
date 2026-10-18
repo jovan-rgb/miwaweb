@@ -47,13 +47,17 @@ function doGet(e) {
     const sheet = getAssessmentSheet_();
     const values = sheet.getDataRange().getValues();
     const headers = values.length ? values[0] : [];
+    
+    // Optimization: Only return the last 50 records to prevent server lag with large sheets
     const rows = values.slice(1)
       .filter(row => row.some(value => value !== ''))
+      .slice(-50) 
       .map(row => headers.reduce((record, header, index) => {
         const value = row[index];
         record[header] = value instanceof Date ? value.toISOString() : String(value || '');
         return record;
       }, {}));
+      
     const callback = e && e.parameter && e.parameter.callback;
 
     if (callback) {
