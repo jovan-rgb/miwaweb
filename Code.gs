@@ -2,11 +2,23 @@ const SHEET_NAME = 'Pengkajian Komunitas';
 
 function doPost(e) {
   try {
-    requireAuthorizedUser_();
     const rawPayload = e && e.parameter && e.parameter.payload;
-    if (!rawPayload) throw new Error('Data pengkajian tidak ditemukan.');
+    if (!rawPayload) throw new Error('Data tidak ditemukan.');
 
     const payload = JSON.parse(rawPayload);
+    
+    // Handle Login Request
+    if (payload.action === 'login') {
+      const { email, password } = payload;
+      if (email === 'miwa' && password === 'miwa123') {
+        return jsonOutput_({ ok: true, token: 'miwa-auth-token-123' });
+      } else {
+        throw new Error('Email atau password salah.');
+      }
+    }
+
+    // Handle Data Submission (Requires Auth)
+    requireAuthorizedUser_();
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('Format data pengkajian tidak valid.');
     }
@@ -37,7 +49,7 @@ function doPost(e) {
     }
   } catch (error) {
     console.error(error);
-    return jsonOutput_({ error: error.message || 'Gagal menyimpan data.' });
+    return jsonOutput_({ error: error.message || 'Gagal memproses permintaan.' });
   }
 }
 
