@@ -442,6 +442,39 @@ footer {
   100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
+.theme-toggle-inline {
+  cursor: pointer;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  padding: 6px;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+}
+
+.theme-toggle-inline:hover {
+  transform: scale(1.1) rotate(15deg);
+  background: var(--surface-soft);
+  border-color: var(--primary);
+}
+
+.theme-toggle-inline svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--ink);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.theme-toggle-inline svg.bubble-anim {
+  animation: bubbleSwitch 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 @media (max-width: 850px) {
   .login-container {
     grid-template-columns: 1fr;
