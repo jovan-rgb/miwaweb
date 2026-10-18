@@ -477,3 +477,31 @@ footer {
   0% { transform: scale(0) rotate(-180deg); opacity: 0; }
   100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
+
+@media (max-width: 850px) {
+  .login-container {
+    grid-template-columns: 1fr;
+    margin: 20px;
+    border-radius: 24px;
+  }
+  .login-illustration {
+    display: none;
+  }
+  .login-panel {
+    padding: 40px 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    margin: 0;
+    border-radius: 0;
+    padding: 20px;
+  }
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+  .page-header h1 {
+    font-size: 1.75rem;
+  }
+}
