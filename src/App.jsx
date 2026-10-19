@@ -1,7 +1,110 @@
-import React, { useState, useEffect } from 'react';
-import './styles/app.css';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_Diim9PMzvJnS9938OQOu-1ucedtWuT5-fYolBpzQm5rwuMF7QPhBpZHx74ypb07l/exec';
+
+function todayLocal() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function createInitialFormData() {
+  return { tanggal_pengkajian: todayLocal() };
+}
+
+function createRecordId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// localStorage bisa melempar error (mode privat / cookie diblokir), jadi akses dibungkus.
+function storageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Penyimpanan tidak tersedia; abaikan.
+  }
+}
+
+function storageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Penyimpanan tidak tersedia; abaikan.
+  }
+}
+
+function formatFieldLabel(key) {
+  const field = questionGroups.flatMap(group => group.fields).find(item => item.name === key);
+  if (field) return field.label;
+  return key.replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function formatFieldValue(key, value) {
+  if (key === 'timestamp') {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toLocaleString('id-ID');
+  }
+  return String(value ?? '');
+}
+
+// Google Apps Script tidak mengizinkan pembacaan respons lintas domain (CORS) dan
+// mengharuskan cookie login Google ikut terkirim. JSONP lewat tag <script> adalah
+// satu-satunya cara andal untuk membaca rekap; Code.gs sudah mendukung parameter callback.
+function fetchRecapRows() {
+  return new Promise((resolve, reject) => {
+    const callbackName = `miwaRecap_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement('script');
+    let timer;
+
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      script.remove();
+      delete window[callbackName];
+    };
+
+    window[callbackName] = (result) => {
+      cleanup();
+      if (result && result.error) {
+        reject(new Error(result.error));
+        return;
+      }
+      resolve(Array.isArray(result) ? result : []);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Tidak dapat membaca data. Pastikan Anda login dengan akun Google yang diizinkan.'));
+    };
+
+    timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Permintaan rekap melewati batas waktu. Coba lagi.'));
+    }, 20000);
+
+    let url;
+    try {
+      url = new URL(APPS_SCRIPT_URL);
+    } catch {
+      cleanup();
+      reject(new Error('URL Apps Script tidak valid.'));
+      return;
+    }
+    url.searchParams.set('callback', callbackName);
+    url.searchParams.set('_', String(Date.now()));
+    script.src = url.toString();
+    document.head.appendChild(script);
+  });
+}
 
 const questionGroups = [
   {
@@ -89,25 +192,24 @@ const questionGroups = [
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [theme, setTheme] = useState(() => storageGet('theme') || 'dark');
   const [loginData, setLoginData] = useState({ email: '', password: '' });
   const [activeTab, setActiveTab] = useState('input');
-  const [formData, setFormData] = useState({});
+  const [formData, setFormData] = useState(createInitialFormData);
   const [recapData, setRecapData] = useState([]);
+  const [detailId, setDetailId] = useState(null);
   const [status, setStatus] = useState({ message: '', type: '' });
   const [loading, setLoading] = useState(false);
+  const pendingRecordId = useRef('');
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
+    storageSet('theme', theme);
   }, [theme]);
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = storageGet('auth_token');
     if (token) setIsAuthenticated(true);
-    
-    const today = new Date().toISOString().split('T')[0];
-    setFormData({ tanggal_pengkajian: today });
   }, []);
 
   const toggleTheme = () => {
@@ -133,15 +235,15 @@ function App() {
         const body = new URLSearchParams({ 
           payload: JSON.stringify({ action: 'login', ...loginData }) 
         });
-        await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body });
+        await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', credentials: 'include', body });
         
-        localStorage.setItem('auth_token', 'miwa-auth-token-123');
+        storageSet('auth_token', 'miwa-auth-token-123');
         setIsAuthenticated(true);
         setStatus({ message: 'Login berhasil!', type: 'success' });
       } else {
         setStatus({ message: 'Email atau password salah!', type: 'error' });
       }
-    } catch (error) {
+    } catch {
       setStatus({ message: 'Terjadi kesalahan koneksi.', type: 'error' });
     } finally {
       setLoading(false);
@@ -149,9 +251,12 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('auth_token');
+    storageRemove('auth_token');
     setIsAuthenticated(false);
-    setFormData({});
+    setLoginData({ email: '', password: '' });
+    setFormData(createInitialFormData());
+    pendingRecordId.current = '';
+    setDetailId(null);
     setStatus({ message: '', type: '' });
   };
 
@@ -160,21 +265,50 @@ function App() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const resetForm = () => {
+    pendingRecordId.current = '';
+    setFormData(createInitialFormData());
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setStatus({ message: 'Menyimpan data...', type: '' });
 
-    const recordId = crypto.randomUUID();
+    if (!pendingRecordId.current) pendingRecordId.current = createRecordId();
+    const recordId = pendingRecordId.current;
     const payload = { ...formData, record_id: recordId };
 
     try {
       const body = new URLSearchParams({ payload: JSON.stringify(payload) });
-      await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body });
-      setStatus({ message: 'Data berhasil dikirim!', type: 'success' });
-      setFormData({ tanggal_pengkajian: new Date().toISOString().split('T')[0] });
+      // credentials: 'include' wajib agar cookie login Google ikut terkirim ke Apps Script.
+      await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', credentials: 'include', body });
+      setStatus({ message: 'Data terkirim. Memverifikasi...', type: '' });
+
+      // Respons POST bersifat opaque (no-cors), jadi penyimpanan diverifikasi lewat rekap.
+      const delays = [1200, 1800, 2400];
+      let saved = false;
+      for (const delay of delays) {
+        await new Promise(resolve => window.setTimeout(resolve, delay));
+        const rows = await fetchRecapRows();
+        if (rows.some(row => row.record_id === recordId)) {
+          saved = true;
+          break;
+        }
+      }
+
+      if (!saved) {
+        setStatus({
+          message: 'Data belum terverifikasi di rekap. Pastikan Anda login dengan akun Google yang diizinkan, lalu tekan Simpan lagi.',
+          type: 'error'
+        });
+        return;
+      }
+
+      resetForm();
+      setStatus({ message: 'Data berhasil disimpan!', type: 'success' });
     } catch (error) {
-      setStatus({ message: 'Gagal mengirim data.', type: 'error' });
+      setStatus({ message: `Gagal mengirim data: ${error.message}`, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -184,12 +318,12 @@ function App() {
     setLoading(true);
     setStatus({ message: 'Memuat data...', type: '' });
     try {
-      const response = await fetch(`${APPS_SCRIPT_URL}?_=${Date.now()}`);
-      const data = await response.json();
-      setRecapData(Array.isArray(data) ? data : []);
-      setStatus({ message: 'Data berhasil dimuat.', type: 'success' });
+      const rows = await fetchRecapRows();
+      setRecapData(rows);
+      setStatus({ message: `Data berhasil dimuat (${rows.length} pengkajian).`, type: 'success' });
     } catch (error) {
-      setStatus({ message: 'Gagal memuat data.', type: 'error' });
+      setRecapData([]);
+      setStatus({ message: `Gagal memuat data: ${error.message}`, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -261,6 +395,7 @@ function App() {
               Log in with Google
             </button>
             
+            <p className="login-hint">Penyimpanan dan pembacaan data memerlukan akun Google tim yang telah diizinkan pada Apps Script.</p>
             <p className={`form-status ${status.type}`} style={{ textAlign: 'center', marginTop: '15px' }}>{status.message}</p>
           </form>
         </div>
@@ -270,18 +405,6 @@ function App() {
 
   return (
     <main className="container">
-      <button onClick={toggleTheme} className="theme-toggle" title="Toggle Dark Mode">
-        {theme === 'light' ? (
-          <svg className="bubble-anim" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79Z" fill="currentColor"/>
-          </svg>
-        ) : (
-          <svg className="bubble-anim" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="5" fill="currentColor"/>
-            <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        )}
-      </button>
       <header className="page-header">
         <div style={{ 
           display: 'flex', 
@@ -376,7 +499,7 @@ function App() {
               </fieldset>
             ))}
             <div className="form-actions">
-              <button type="reset" className="button button-secondary" onClick={() => setFormData({})}>Bersihkan</button>
+              <button type="reset" className="button button-secondary" onClick={resetForm}>Bersihkan</button>
               <button type="submit" className="button button-primary" disabled={loading}>
                 {loading ? 'Mengirim...' : 'Simpan pengkajian →'}
               </button>
@@ -395,6 +518,7 @@ function App() {
               {loading ? 'Memuat...' : '↻ Muat ulang'}
             </button>
           </div>
+          <p className={`form-status ${status.type}`}>{status.message}</p>
           <div className="table-responsive">
             <table>
               <thead>
@@ -406,14 +530,45 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {recapData.map((item, idx) => (
-                  <tr key={idx}>
-                    <td>{item.nama_kk}</td>
-                    <td>{item.alamat}</td>
-                    <td>{item.masalah_prioritas}</td>
-                    <td><button className="button button-secondary" style={{padding: '4px 8px', fontSize: '0.7rem'}}>Detail</button></td>
-                  </tr>
-                ))}
+                {recapData.map((item, idx) => {
+                  const rowKey = item.record_id || `row-${idx}`;
+                  const isOpen = detailId === rowKey;
+                  return (
+                    <Fragment key={rowKey}>
+                      <tr>
+                        <td>{item.nama_kk}</td>
+                        <td>{item.alamat}</td>
+                        <td>{item.masalah_prioritas}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="button button-secondary detail-button"
+                            aria-expanded={isOpen}
+                            onClick={() => setDetailId(isOpen ? null : rowKey)}
+                          >
+                            {isOpen ? 'Tutup' : 'Detail'}
+                          </button>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr className="detail-row">
+                          <td colSpan="4">
+                            <dl className="detail-list">
+                              {Object.entries(item)
+                                .filter(([key, value]) => key !== 'record_id' && String(value ?? '').trim())
+                                .map(([key, value]) => (
+                                  <div className="detail-item" key={key}>
+                                    <dt>{formatFieldLabel(key)}</dt>
+                                    <dd>{formatFieldValue(key, value)}</dd>
+                                  </div>
+                                ))}
+                            </dl>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
                 {recapData.length === 0 && !loading && (
                   <tr><td colSpan="4" className="empty-state">Belum ada data.</td></tr>
                 )}

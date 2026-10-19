@@ -145,6 +145,15 @@ body {
   font-weight: 700;
 }
 
+.required-note {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.required-marker {
+  color: var(--danger);
+}
+
 .privacy-note {
   margin: 0 0 24px;
   padding: 12px 16px;
@@ -226,6 +235,24 @@ body {
   margin-top: 32px;
 }
 
+.form-status {
+  min-height: 1.6em;
+  margin: 8px 0;
+  font-size: 0.9rem;
+}
+
+.form-status:empty {
+  display: none;
+}
+
+.form-status.error {
+  color: var(--danger);
+}
+
+.form-status.success {
+  color: var(--success);
+}
+
 .button {
   padding: 12px 24px;
   border-radius: 10px;
@@ -280,6 +307,42 @@ td {
   padding: 12px;
   border-bottom: 1px solid var(--line);
   font-size: 0.9rem;
+}
+
+.empty-state {
+  margin: 0;
+  padding: 25px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.detail-button {
+  padding: 4px 10px;
+  font-size: 0.72rem;
+}
+
+.detail-row td {
+  background: var(--surface-soft);
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 20px;
+  margin: 0;
+}
+
+.detail-list dt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.detail-list dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .setup-guide {
@@ -431,6 +494,14 @@ footer {
 
 .button-google:hover {
   background: var(--surface-soft);
+}
+
+.login-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+  line-height: 1.5;
 }
 
 .theme-toggle {
